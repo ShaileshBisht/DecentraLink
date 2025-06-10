@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useAccount } from "wagmi";
 import { Post, apiService } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
@@ -10,54 +10,91 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Heart, MessageCircle, Share, MoreHorizontal, Clock, Sparkles, Reply, ThumbsUp, Zap, Hexagon } from "lucide-react";
+import { Heart, MessageCircle, Share, MoreHorizontal, Clock, Sparkles, Reply, ThumbsUp, Zap, Hexagon, Trash2 } from "lucide-react";
+import { useAuth } from "@/providers/AuthProvider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface PostCardProps {
-  post: Post;
-  onPostUpdate?: () => void;
+  post: Post & {
+    has_liked: boolean;
+    likes_count: number;
+    comments_count: number;
+  };
+  onPostUpdate: () => void;
 }
 
-export function PostCard({ post, onPostUpdate }: PostCardProps) {
-  const { address, isConnected } = useAccount();
+export const PostCard = React.memo(({ post, onPostUpdate }: PostCardProps) => {
   const [isLiking, setIsLiking] = useState(false);
   const [isCommenting, setIsCommenting] = useState(false);
+  const [isDeletingComment, setIsDeletingComment] = useState<number | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [commentContent, setCommentContent] = useState("");
   const [error, setError] = useState("");
   const [isHovered, setIsHovered] = useState(false);
   const [justLiked, setJustLiked] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { address } = useAccount();
+  const { isAuthenticated } = useAuth();
+  const isOwnPost = address ? address.toLowerCase() === post.wallet_address.toLowerCase() : false;
 
-  const isAuthenticated = typeof window !== "undefined" && localStorage.getItem("auth_token");
-  const hasLiked = post.likes?.some((like) => like.wallet_address.toLowerCase() === address?.toLowerCase());
-  const likesCount = post.likes?.length || 0;
-  const commentsCount = post.comments?.length || 0;
+  const [hasLiked, setHasLiked] = useState(post.has_liked);
+  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [commentsCount, setCommentsCount] = useState(post.comments_count);
 
   const handleLike = async () => {
-    if (!isConnected || !isAuthenticated) return;
-
-    setIsLiking(true);
-    setError("");
+    if (!isAuthenticated) return;
 
     try {
+      setIsLiking(true);
+      setError("");
+
       if (hasLiked) {
-        await apiService.unlikePost(post.id);
+        // If already liked, try to unlike
+        try {
+          await apiService.unlikePost(post.id);
+          setLikesCount((prev: number) => prev - 1);
+          setHasLiked(false);
+        } catch (error: any) {
+          console.error("Error unliking post:", error);
+          setError("Failed to unlike post");
+          return;
+        }
       } else {
-        await apiService.likePost(post.id);
+        // If not liked, try to like
+        try {
+          await apiService.likePost(post.id);
+          setLikesCount((prev: number) => prev + 1);
+          setHasLiked(true);
+          setJustLiked(true);
+          setTimeout(() => setJustLiked(false), 2000);
+        } catch (error: any) {
+          if (error.message?.includes("already liked")) {
+            // If the post is already liked, update the UI state
+            setHasLiked(true);
+            setLikesCount((prev: number) => prev + 1);
+          } else {
+            console.error("Error liking post:", error);
+            setError("Failed to like post");
+            return;
+          }
+        }
       }
-      onPostUpdate?.();
-    } catch (error: any) {
-      if (error.message.includes("already liked")) {
-        setError("You have already liked this post");
-      } else if (error.message.includes("not found")) {
-        setError("Like not found");
-      } else {
-        setError("Failed to update like status");
-      }
-      console.error("Error updating like status:", error);
+      onPostUpdate();
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      setError("Failed to update like status");
     } finally {
-      setTimeout(() => {
-        setIsLiking(false);
-      }, 300);
+      setIsLiking(false);
     }
   };
 
@@ -69,7 +106,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
       return;
     }
 
-    if (!isConnected || !isAuthenticated) return;
+    if (!isAuthenticated) return;
 
     setIsCommenting(true);
     setError("");
@@ -77,12 +114,43 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
     try {
       await apiService.commentOnPost(post.id, commentContent.trim());
       setCommentContent("");
+      setCommentsCount((prev) => prev + 1);
       onPostUpdate?.();
     } catch (error) {
       setError("Failed to add comment");
       console.error("Error commenting on post:", error);
     } finally {
       setIsCommenting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!isOwnPost) return;
+
+    try {
+      setIsDeleting(true);
+      await apiService.deletePost(post.id);
+      onPostUpdate();
+    } catch (error) {
+      console.error("Error deleting post:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!isAuthenticated) return;
+
+    try {
+      setIsDeletingComment(commentId);
+      await apiService.deleteComment(post.id, commentId);
+      setCommentsCount((prev) => prev - 1);
+      onPostUpdate();
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      setError("Failed to delete comment");
+    } finally {
+      setIsDeletingComment(null);
     }
   };
 
@@ -140,15 +208,32 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
               </div>
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white/10 rounded-xl w-10 h-10 p-0 flex-shrink-0 border border-white/20 ${
-                isHovered ? "opacity-100" : ""
-              }`}
-            >
-              <MoreHorizontal className="w-4 h-4 text-white/60" />
-            </Button>
+            {isOwnPost && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" disabled={isDeleting}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Post</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete this post? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </div>
 
@@ -160,7 +245,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
         </div>
 
         {/* Engagement Stats */}
-        {(likesCount > 0 || commentsCount > 0) && (
+        {(likesCount > 0 || post.comments_count > 0) && (
           <div className="px-6 pb-4">
             <div className="flex items-center justify-between text-sm bg-white/5 rounded-xl px-4 py-3 border border-white/10">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
@@ -179,11 +264,11 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
                     </span>
                   </div>
                 )}
-                {commentsCount > 0 && (
+                {post.comments_count > 0 && (
                   <div className="flex items-center gap-2">
                     <MessageCircle className="w-4 h-4 text-purple-300" />
                     <span className="font-medium text-white/80">
-                      {commentsCount} {commentsCount === 1 ? "comment" : "comments"}
+                      {post.comments_count} {post.comments_count === 1 ? "comment" : "comments"}
                     </span>
                   </div>
                 )}
@@ -202,7 +287,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
                 variant="ghost"
                 size="lg"
                 onClick={handleLike}
-                disabled={isLiking || !isConnected || !isAuthenticated}
+                disabled={isLiking || !isAuthenticated}
                 className={`group/like flex-1 sm:flex-none transition-all duration-300 hover:bg-white/10 border border-white/20 hover:border-pink-400/40 rounded-xl ${
                   hasLiked ? "text-pink-300 bg-pink-500/20 border-pink-400/30" : "text-white/70 hover:text-pink-300"
                 } ${isLiking ? "animate-pulse" : ""}`}
@@ -219,7 +304,9 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
                         hasLiked ? "fill-current scale-110" : "group-hover/like:scale-110"
                       }`}
                     />
-                    <span className="text-sm font-medium">{hasLiked ? "Unlike" : likesCount > 0 ? likesCount : "Like"}</span>
+                    <span className="text-sm font-medium">
+                      {hasLiked ? "Unlike" : likesCount > 0 ? `${likesCount} ${likesCount === 1 ? "Like" : "Likes"}` : "Like"}
+                    </span>
                     {hasLiked && <Sparkles className="w-3 h-3 animate-pulse" />}
                   </div>
                 )}
@@ -233,7 +320,9 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
               >
                 <div className="flex items-center gap-2">
                   <MessageCircle className="w-4 h-4 transition-transform group-hover/comment:scale-110" />
-                  <span className="text-sm font-medium">{commentsCount > 0 ? commentsCount : "Comment"}</span>
+                  <span className="text-sm font-medium">
+                    {commentsCount > 0 ? `${commentsCount} ${commentsCount === 1 ? "Comment" : "Comments"}` : "Comment"}
+                  </span>
                 </div>
               </Button>
 
@@ -267,7 +356,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
           <div className="border-t border-white/10 bg-white/5 backdrop-blur-sm">
             <div className="p-6 space-y-4">
               {/* Comment Form */}
-              {isConnected && isAuthenticated && (
+              {isAuthenticated && (
                 <form onSubmit={handleComment} className="space-y-4">
                   <div className="flex gap-3">
                     <Avatar className="w-10 h-10 border border-white/20">
@@ -310,26 +399,46 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
               {/* Comments List */}
               {post.comments && post.comments.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-white/10">
-                  {post.comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <Avatar className="w-8 h-8 border border-white/20">
-                        {comment.user?.profile_pic_url ? <AvatarImage src={comment.user.profile_pic_url} alt="Profile" /> : null}
-                        <AvatarFallback className="bg-gradient-to-br from-green-500 to-teal-500 text-white text-xs font-bold">
-                          {getUserInitial(comment.user, comment.wallet_address)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 bg-white/5 rounded-xl p-3 border border-white/10">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-white text-sm">{comment.user?.username || "Anonymous"}</span>
-                          <span className="text-white/40 text-xs">•</span>
-                          <span className="text-white/60 text-xs">
-                            {formatDistanceToNow(new Date(comment.timestamp), { addSuffix: true })}
-                          </span>
+                  {post.comments.map((comment) => {
+                    const isOwnComment = address?.toLowerCase() === comment.wallet_address.toLowerCase();
+                    return (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar className="w-8 h-8 border border-white/20">
+                          {comment.user?.profile_pic_url ? <AvatarImage src={comment.user.profile_pic_url} alt="Profile" /> : null}
+                          <AvatarFallback className="bg-gradient-to-br from-green-500 to-teal-500 text-white text-xs font-bold">
+                            {getUserInitial(comment.user, comment.wallet_address)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 bg-white/5 rounded-xl p-3 border border-white/10">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white text-sm">{comment.user?.username || "Anonymous"}</span>
+                              <span className="text-white/40 text-xs">•</span>
+                              <span className="text-white/60 text-xs">
+                                {formatDistanceToNow(new Date(comment.timestamp), { addSuffix: true })}
+                              </span>
+                            </div>
+                            {isOwnComment && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteComment(comment.id)}
+                                disabled={isDeletingComment === comment.id}
+                              >
+                                {isDeletingComment === comment.id ? (
+                                  <div className="w-3 h-3 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-white/90 text-sm leading-relaxed">{comment.content}</p>
                         </div>
-                        <p className="text-white/90 text-sm leading-relaxed">{comment.content}</p>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -346,4 +455,4 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
       </CardContent>
     </div>
   );
-}
+});

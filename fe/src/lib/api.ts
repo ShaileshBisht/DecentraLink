@@ -138,12 +138,14 @@ class ApiService {
   }
 
   async getAllPosts(): Promise<Post[]> {
-    const response = await fetch(`${API_BASE_URL}/posts`);
+    const headers = this.isAuthenticated() ? this.getAuthHeaders() : {};
+    const response = await fetch(`${API_BASE_URL}/posts`, { headers });
     return this.handleResponse(response);
   }
 
   async getPost(id: number): Promise<Post> {
-    const response = await fetch(`${API_BASE_URL}/posts/${id}`);
+    const headers = this.isAuthenticated() ? this.getAuthHeaders() : {};
+    const response = await fetch(`${API_BASE_URL}/posts/${id}`, { headers });
     return this.handleResponse(response);
   }
 
@@ -184,7 +186,18 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
 
-    return this.handleResponse(response);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Like not found");
+      } else if (response.status === 401) {
+        throw new Error("Authentication required");
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to unlike post");
+      }
+    }
+
+    return response.json();
   }
 
   async commentOnPost(postId: number, content: string): Promise<Comment> {
@@ -196,6 +209,32 @@ class ApiService {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ content }),
+    });
+
+    return this.handleResponse(response);
+  }
+
+  async deleteComment(postId: number, commentId: number): Promise<void> {
+    if (!this.isAuthenticated()) {
+      throw new Error("Authentication required to delete comments");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/posts/${postId}/comments/${commentId}`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
+    });
+
+    return this.handleResponse(response);
+  }
+
+  async deletePost(postId: number): Promise<void> {
+    if (!this.isAuthenticated()) {
+      throw new Error("Authentication required to delete posts");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/posts/${postId}`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
     });
 
     return this.handleResponse(response);

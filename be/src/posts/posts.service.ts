@@ -21,6 +21,40 @@ export class PostsService {
     private commentsRepository: Repository<Comment>,
   ) {}
 
+  private async addLikeInfo(
+    posts: Post[],
+    walletAddress?: string,
+  ): Promise<any[]> {
+    if (!walletAddress) {
+      return posts.map((post) => ({
+        ...post,
+        has_liked: false,
+        likes_count: post.likes?.length || 0,
+        comments_count: post.comments?.length || 0,
+      }));
+    }
+
+    const postsWithLikeInfo = await Promise.all(
+      posts.map(async (post) => {
+        const hasLiked = await this.likesRepository.findOne({
+          where: {
+            post_id: post.id,
+            wallet_address: walletAddress.toLowerCase(),
+          },
+        });
+
+        return {
+          ...post,
+          has_liked: !!hasLiked,
+          likes_count: post.likes?.length || 0,
+          comments_count: post.comments?.length || 0,
+        };
+      }),
+    );
+
+    return postsWithLikeInfo;
+  }
+
   async createPost(createPostDto: CreatePostDto): Promise<Post> {
     const post = this.postsRepository.create({
       wallet_address: createPostDto.wallet_address.toLowerCase(),
@@ -29,14 +63,16 @@ export class PostsService {
     return this.postsRepository.save(post);
   }
 
-  async findAll(): Promise<Post[]> {
-    return this.postsRepository.find({
+  async findAll(walletAddress?: string): Promise<any[]> {
+    const posts = await this.postsRepository.find({
       relations: ['user', 'likes', 'comments', 'comments.user'],
       order: { timestamp: 'DESC' },
     });
+
+    return this.addLikeInfo(posts, walletAddress);
   }
 
-  async findOne(id: number): Promise<Post> {
+  async findOne(id: number, walletAddress?: string): Promise<any> {
     const post = await this.postsRepository.findOne({
       where: { id },
       relations: ['user', 'likes', 'likes.user', 'comments', 'comments.user'],
@@ -46,7 +82,8 @@ export class PostsService {
       throw new NotFoundException('Post not found');
     }
 
-    return post;
+    const [postWithLikeInfo] = await this.addLikeInfo([post], walletAddress);
+    return postWithLikeInfo;
   }
 
   async likePost(postId: number, likePostDto: LikePostDto): Promise<Like> {
@@ -110,5 +147,45 @@ export class PostsService {
     });
 
     return this.commentsRepository.save(comment);
+  }
+
+  async findOneComment(commentId: number): Promise<Comment> {
+    const comment = await this.commentsRepository.findOne({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    return comment;
+  }
+
+  async deleteComment(postId: number, commentId: number): Promise<void> {
+    const post = await this.postsRepository.findOne({ where: { id: postId } });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const comment = await this.findOneComment(commentId);
+    if (comment.post_id !== postId) {
+      throw new NotFoundException('Comment not found in this post');
+    }
+
+    await this.commentsRepository.delete(commentId);
+  }
+
+  async deletePost(postId: number): Promise<void> {
+    const post = await this.postsRepository.findOne({ where: { id: postId } });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    // Delete associated likes and comments first
+    await this.likesRepository.delete({ post_id: postId });
+    await this.commentsRepository.delete({ post_id: postId });
+
+    // Then delete the post
+    await this.postsRepository.delete(postId);
   }
 }

@@ -8,6 +8,7 @@ import {
   Request,
   ParseIntPipe,
   Delete,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import {
@@ -23,14 +24,18 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class PostsController {
   constructor(private postsService: PostsService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  async getAllPosts() {
-    return this.postsService.findAll();
+  async getAllPosts(@Request() req) {
+    const walletAddress = req.user?.wallet_address;
+    return this.postsService.findAll(walletAddress);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async getPost(@Param('id', ParseIntPipe) id: number) {
-    return this.postsService.findOne(id);
+  async getPost(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const walletAddress = req.user?.wallet_address;
+    return this.postsService.findOne(id, walletAddress);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -74,5 +79,37 @@ export class PostsController {
       content: newCommentDto.content,
     };
     return this.postsService.commentOnPost(id, createCommentDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async deletePost(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const post = await this.postsService.findOne(id);
+    if (
+      post.wallet_address.toLowerCase() !==
+      req.user.wallet_address.toLowerCase()
+    ) {
+      throw new ForbiddenException('You can only delete your own posts');
+    }
+    await this.postsService.deletePost(id);
+    return { message: 'Post deleted successfully' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':postId/comments/:commentId')
+  async deleteComment(
+    @Param('postId', ParseIntPipe) postId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Request() req,
+  ) {
+    const comment = await this.postsService.findOneComment(commentId);
+    if (
+      comment.wallet_address.toLowerCase() !==
+      req.user.wallet_address.toLowerCase()
+    ) {
+      throw new ForbiddenException('You can only delete your own comments');
+    }
+    await this.postsService.deleteComment(postId, commentId);
+    return { message: 'Comment deleted successfully' };
   }
 }
