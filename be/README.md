@@ -1,101 +1,86 @@
-# DecentraLink Backend
+# Decentralized Social Media - Backend API
 
-A robust NestJS backend API for the DecentraLink decentralized social media platform. Features JWT authentication with wallet signature verification, PostgreSQL database, and RESTful APIs for posts, comments, likes, and user management.
+A NestJS-based backend API for a decentralized social media platform that supports wallet-based authentication, posts, comments, and likes.
 
 ## 🚀 Features
 
-- **Wallet Authentication** - Ethereum signature-based authentication
-- **JWT Token Management** - Secure session handling
-- **PostgreSQL Database** - Robust data persistence with TypeORM
-- **RESTful APIs** - Complete CRUD operations for social features
-- **Input Validation** - DTOs with class-validator
-- **CORS Support** - Frontend integration ready
-- **Error Handling** - Comprehensive error responses
+- **Wallet-based Authentication**: Sign-in with crypto wallet signatures
+- **JWT Token Management**: Secure API access with JWT tokens
+- **Posts Management**: Create, read, and interact with posts
+- **Social Features**: Like and comment on posts
+- **User Profiles**: Manage user profiles and statistics
+- **PostgreSQL Database**: Reliable data persistence
+- **TypeORM Integration**: Type-safe database operations
 
 ## 📋 Prerequisites
 
-- Node.js 18.0 or higher
-- PostgreSQL 12 or higher
-- npm or yarn package manager
+Before running the backend, ensure you have:
+
+- **Node.js** (v18 or higher)
+- **npm** or **yarn**
+- **PostgreSQL** (v12 or higher)
+- **Git**
 
 ## 🛠️ Installation
 
-1. **Navigate to backend directory:**
+1. **Clone the repository and navigate to the backend directory:**
 
    ```bash
-   cd be
+   git clone <repository-url>
+   cd decentralized-social-mvp/be
    ```
 
 2. **Install dependencies:**
 
    ```bash
    npm install
-   # or
-   yarn install
    ```
 
 3. **Set up environment variables:**
+
+   Create a `.env` file in the `be` directory:
 
    ```bash
    cp .env.example .env
    ```
 
-4. **Set up PostgreSQL database:**
-   ```bash
-   # Create database (adjust credentials as needed)
-   createdb decentralink_dev
+   Update the `.env` file with your configuration:
+
+   ```env
+   # Database Configuration
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_USERNAME=postgres
+   DB_PASSWORD=your_password
+   DB_NAME=decentralized_social
+
+   # JWT Configuration
+   JWT_SECRET=your-super-secret-jwt-key-here
+   JWT_EXPIRES_IN=7d
+
+   # Application Configuration
+   NODE_ENV=development
+   PORT=3001
+
+   # CORS Configuration (optional)
+   FRONTEND_URL=http://localhost:3000
    ```
 
-## 🔧 Environment Configuration
+## 🗄️ Database Setup
 
-Create a `.env` file in the `be` directory with the following variables:
+1. **Create PostgreSQL database:**
 
-```bash
-# Database Configuration
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_USERNAME=postgres
-DATABASE_PASSWORD=your_password
-DATABASE_NAME=decentralink_dev
+   ```sql
+   CREATE DATABASE decentralized_social;
+   ```
 
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-JWT_EXPIRES_IN=24h
+2. **Database tables will be created automatically** when you start the application (thanks to TypeORM's `synchronize: true` in development mode).
 
-# Server Configuration
-PORT=3001
-NODE_ENV=development
+   Alternatively, you can run the provided SQL schema manually:
 
-# CORS Configuration
-FRONTEND_URL=http://localhost:3000
-
-# Optional: Logging
-LOG_LEVEL=debug
-```
-
-### Environment Variables Details:
-
-#### Database Configuration
-
-- **DATABASE_HOST**: PostgreSQL server host (default: localhost)
-- **DATABASE_PORT**: PostgreSQL server port (default: 5432)
-- **DATABASE_USERNAME**: Database username
-- **DATABASE_PASSWORD**: Database password
-- **DATABASE_NAME**: Database name
-
-#### JWT Configuration
-
-- **JWT_SECRET**: Secret key for JWT token signing (MUST be changed in production)
-- **JWT_EXPIRES_IN**: Token expiration time (e.g., '24h', '7d', '30m')
-
-#### Server Configuration
-
-- **PORT**: Server port (default: 3001)
-- **NODE_ENV**: Environment (development/production/test)
-
-#### CORS Configuration
-
-- **FRONTEND_URL**: Frontend application URL for CORS
+   ```bash
+   psql -U postgres -d decentralized_social -f database-schema.sql
+   ```
 
 ## 🏃‍♂️ Running the Application
 
@@ -104,43 +89,41 @@ LOG_LEVEL=debug
 ```bash
 # Start the development server with hot reload
 npm run start:dev
-# or
-yarn start:dev
-```
 
-The server will be available at [http://localhost:3001](http://localhost:3001)
+# The API will be available at http://localhost:3001
+```
 
 ### Production Mode
 
 ```bash
 # Build the application
 npm run build
-# or
-yarn build
 
 # Start the production server
 npm run start:prod
-# or
-yarn start:prod
 ```
 
-### Database Operations
+### Debug Mode
 
 ```bash
-# Run database migrations
-npm run migration:run
-# or
-yarn migration:run
+# Start with debugging enabled
+npm run start:debug
+```
 
-# Revert last migration
-npm run migration:revert
-# or
-yarn migration:revert
+## 🧪 Testing
 
-# Generate new migration
-npm run migration:generate -- --name=MigrationName
-# or
-yarn migration:generate --name=MigrationName
+```bash
+# Run unit tests
+npm run test
+
+# Run unit tests with coverage
+npm run test:cov
+
+# Run end-to-end tests
+npm run test:e2e
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
 ## 📁 Project Structure
@@ -152,15 +135,16 @@ be/
 │   │   ├── auth.controller.ts
 │   │   ├── auth.module.ts
 │   │   ├── auth.service.ts
+│   │   ├── jwt-auth.guard.ts
 │   │   └── jwt.strategy.ts
 │   ├── dto/                 # Data Transfer Objects
 │   │   ├── auth.dto.ts
 │   │   └── post.dto.ts
 │   ├── entities/            # Database entities
-│   │   ├── Comment.entity.ts
-│   │   ├── Like.entity.ts
-│   │   ├── Post.entity.ts
-│   │   └── User.entity.ts
+│   │   ├── user.entity.ts
+│   │   ├── post.entity.ts
+│   │   ├── like.entity.ts
+│   │   └── comment.entity.ts
 │   ├── posts/               # Posts module
 │   │   ├── posts.controller.ts
 │   │   ├── posts.module.ts
@@ -336,7 +320,11 @@ Create new post (requires authentication).
 
 #### POST /posts/:id/like
 
-Like/unlike a post (requires authentication).
+Like a post (requires authentication).
+
+#### DELETE /posts/:id/like
+
+Unlike a post (requires authentication).
 
 #### POST /posts/:id/comment
 
@@ -382,115 +370,130 @@ npm run migration:generate # Generate new migration
 
 - Configurable secret key
 - Token expiration
-- Wallet address verification
+- Automatic token validation
+- Wallet address extraction from tokens
 
-### Input Validation
+### Data Validation
 
-- DTO validation with class-validator
-- SQL injection prevention with TypeORM
-- XSS protection with input sanitization
+- Input validation using class-validator
+- SQL injection prevention through TypeORM
+- XSS protection through input sanitization
 
-### CORS Configuration
+### CORS Protection
 
-- Configurable allowed origins
-- Credential support for authenticated requests
+- Configurable CORS origins
+- Secure headers
 
-## 🚨 Common Issues
+## 🌍 Environment Variables
 
-### 1. Database Connection Issues
+| Variable         | Description           | Default                 | Required |
+| ---------------- | --------------------- | ----------------------- | -------- |
+| `DB_HOST`        | PostgreSQL host       | `localhost`             | Yes      |
+| `DB_PORT`        | PostgreSQL port       | `5432`                  | Yes      |
+| `DB_USERNAME`    | Database username     | `postgres`              | Yes      |
+| `DB_PASSWORD`    | Database password     | -                       | Yes      |
+| `DB_NAME`        | Database name         | `decentralized_social`  | Yes      |
+| `JWT_SECRET`     | JWT signing secret    | -                       | Yes      |
+| `JWT_EXPIRES_IN` | Token expiration time | `7d`                    | No       |
+| `NODE_ENV`       | Environment mode      | `development`           | No       |
+| `PORT`           | Application port      | `3001`                  | No       |
+| `FRONTEND_URL`   | Frontend URL for CORS | `http://localhost:3000` | No       |
 
-```bash
-# Check PostgreSQL status
-pg_ctl status
+## 🚀 Deployment
 
-# Restart PostgreSQL
-brew services restart postgresql  # macOS
-sudo systemctl restart postgresql  # Linux
-```
+### Docker Deployment
 
-### 2. Migration Issues
+1. **Build the Docker image:**
 
-```bash
-# Reset database (development only)
-npm run migration:revert
-npm run migration:run
+   ```bash
+   docker build -t decentralized-social-api .
+   ```
 
-# Check migration status
-npm run migration:show
-```
+2. **Run with Docker Compose:**
+   ```bash
+   docker-compose up -d
+   ```
 
-### 3. JWT Token Issues
+### Manual Deployment
 
-- Ensure JWT_SECRET is set and consistent
-- Check token expiration time
-- Verify Bearer token format in requests
+1. **Install dependencies:**
 
-### 4. CORS Issues
+   ```bash
+   npm ci --only=production
+   ```
 
-- Verify FRONTEND_URL matches your frontend
-- Check allowed origins in main.ts
-- Ensure credentials are enabled if needed
+2. **Build the application:**
 
-## 🔧 Configuration
+   ```bash
+   npm run build
+   ```
 
-### TypeORM Configuration
+3. **Set production environment variables**
 
-Database configuration is handled through environment variables and TypeORM options in `app.module.ts`.
+4. **Start the application:**
+   ```bash
+   npm run start:prod
+   ```
 
-### JWT Configuration
+## 🔍 Health Check
 
-JWT strategy and module configuration in `auth/auth.module.ts` and `auth/jwt.strategy.ts`.
-
-### CORS Configuration
-
-CORS settings in `main.ts` with environment-based origin configuration.
-
-## 📦 Dependencies
-
-### Core Dependencies
-
-- **@nestjs/core**: NestJS framework
-- **@nestjs/typeorm**: TypeORM integration
-- **@nestjs/jwt**: JWT authentication
-- **@nestjs/passport**: Passport authentication
-- **pg**: PostgreSQL driver
-
-### Development Dependencies
-
-- **@nestjs/cli**: NestJS CLI tools
-- **@types/node**: Node.js type definitions
-- **typescript**: TypeScript compiler
-- **eslint**: Code linting
-- **prettier**: Code formatting
-
-## 🧪 Testing
+The API includes a health check endpoint:
 
 ```bash
-# Unit tests
-npm run test
-
-# End-to-end tests
-npm run test:e2e
-
-# Test coverage
-npm run test:cov
-
-# Watch mode for development
-npm run test:watch
+GET /health
 ```
 
-## 🤝 Contributing
+Returns API status and database connectivity information.
 
-1. Follow NestJS conventions and best practices
-2. Use TypeScript for all code
-3. Add proper validation with DTOs
-4. Write tests for new features
-5. Update documentation as needed
+## 🐛 Troubleshooting
+
+### Database Connection Issues
+
+1. **Check PostgreSQL is running:**
+
+   ```bash
+   sudo service postgresql status
+   ```
+
+2. **Verify database credentials in `.env`**
+
+3. **Test database connection:**
+   ```bash
+   psql -U postgres -d decentralized_social
+   ```
+
+### Authentication Issues
+
+1. **Verify JWT secret is set in `.env`**
+2. **Check token expiration settings**
+3. **Ensure frontend is sending correct wallet signatures**
+
+### Development Issues
+
+1. **Clear node_modules and reinstall:**
+
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+2. **Check TypeScript compilation:**
+   ```bash
+   npm run build
+   ```
+
+## 📝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## 📄 License
 
-This project is part of the DecentraLink social media platform.
+This project is licensed under the MIT License.
 
 ---
 
-For frontend setup and usage, see the [Frontend README](../fe/README.md).
+For frontend setup instructions, see the [Frontend README](../fe/README.md).

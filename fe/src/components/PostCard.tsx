@@ -39,15 +39,21 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
     setError("");
 
     try {
-      await apiService.likePost(post.id);
+      if (hasLiked) {
+        await apiService.unlikePost(post.id);
+      } else {
+        await apiService.likePost(post.id);
+      }
       onPostUpdate?.();
     } catch (error: any) {
       if (error.message.includes("already liked")) {
         setError("You have already liked this post");
+      } else if (error.message.includes("not found")) {
+        setError("Like not found");
       } else {
-        setError("Failed to like post");
+        setError("Failed to update like status");
       }
-      console.error("Error liking post:", error);
+      console.error("Error updating like status:", error);
     } finally {
       setTimeout(() => {
         setIsLiking(false);
@@ -204,7 +210,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
                 {isLiking ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-pink-300/30 border-t-pink-300 rounded-full animate-spin" />
-                    <span className="text-sm">Liking...</span>
+                    <span className="text-sm">{hasLiked ? "Unliking..." : "Liking..."}</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -213,7 +219,7 @@ export function PostCard({ post, onPostUpdate }: PostCardProps) {
                         hasLiked ? "fill-current scale-110" : "group-hover/like:scale-110"
                       }`}
                     />
-                    <span className="text-sm font-medium">{likesCount > 0 ? likesCount : "Like"}</span>
+                    <span className="text-sm font-medium">{hasLiked ? "Unlike" : likesCount > 0 ? likesCount : "Like"}</span>
                     {hasLiked && <Sparkles className="w-3 h-3 animate-pulse" />}
                   </div>
                 )}

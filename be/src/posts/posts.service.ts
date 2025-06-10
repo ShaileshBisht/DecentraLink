@@ -74,6 +74,26 @@ export class PostsService {
     return this.likesRepository.save(like);
   }
 
+  async unlikePost(postId: number, likePostDto: LikePostDto): Promise<void> {
+    const post = await this.postsRepository.findOne({ where: { id: postId } });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const existingLike = await this.likesRepository.findOne({
+      where: {
+        post_id: postId,
+        wallet_address: likePostDto.wallet_address.toLowerCase(),
+      },
+    });
+
+    if (!existingLike) {
+      throw new NotFoundException('Like not found');
+    }
+
+    await this.likesRepository.remove(existingLike);
+  }
+
   async commentOnPost(
     postId: number,
     createCommentDto: CreateCommentDto,

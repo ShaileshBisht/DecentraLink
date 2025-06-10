@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Delete,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import {
@@ -49,6 +50,16 @@ export class PostsController {
       wallet_address: req.user.wallet_address,
     };
     return this.postsService.likePost(id, likePostDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/like')
+  async unlikePost(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const likePostDto: LikePostDto = {
+      wallet_address: req.user.wallet_address,
+    };
+    await this.postsService.unlikePost(id, likePostDto);
+    return { message: 'Post unliked successfully' };
   }
 
   @UseGuards(JwtAuthGuard)

@@ -174,6 +174,19 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  async unlikePost(postId: number): Promise<void> {
+    if (!this.isAuthenticated()) {
+      throw new Error("Authentication required to unlike posts");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
+    });
+
+    return this.handleResponse(response);
+  }
+
   async commentOnPost(postId: number, content: string): Promise<Comment> {
     if (!this.isAuthenticated()) {
       throw new Error("Authentication required to comment on posts");
